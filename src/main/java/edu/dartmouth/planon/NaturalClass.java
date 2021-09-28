@@ -1,5 +1,8 @@
 package edu.dartmouth.planon;
 
+import java.util.HashMap;
+import java.util.Map;
+
 import nl.planon.hades.userextension.uxinterface.*;
 import nl.planon.util.pnlogging.PnLogger;
 
@@ -17,21 +20,22 @@ public class NaturalClass implements IUserExtension{
         LOG.info("--------------------------------------------");
         LOG.info("SX " + getClass().getName() + " starting..." + NaturalClass.class.getName());
 
+        Map<String, String> parameterMap = getParameterAsStringList(parameter,"=");
+
+        // System.out.println(parameterMap.get("chartString"));
+        LOG.info(parameterMap);
+
         // Order lines
         // Get the chart string
-        String chartString = currentBO.getStringFieldByName("FreeString11").getValueAsString();
+        String chartString = currentBO.getStringFieldByName(parameterMap.get("chartString")).getValueAsString();
         LOG.info("Chartstring: " + chartString);
 
         // Get the cost type
-        String costType = currentBO.getCodesCodeNameFieldByName("FreeString12").getValueAsString();
+        String costType = currentBO.getCodesCodeNameFieldByName(parameterMap.get("costType")).getValueAsString();
         LOG.info("Cost type: " + costType);
 
-        // Get the transaction type
-        String transactionType = currentBO.getCodesNameFieldByName("FreeString13").getValueAsString();
-        LOG.info("Transaction type: " + transactionType);
-
         // Get the work order method
-        String woMethod = currentBO.getCodesNameFieldByName("FreeString10").getValueAsString();
+        String woMethod = currentBO.getCodesNameFieldByName(parameterMap.get("woMethod")).getValueAsString();
         LOG.info("WO method: " + woMethod);
 
         // Get the trade (crew) via Order BO
@@ -53,51 +57,82 @@ public class NaturalClass implements IUserExtension{
         LOG.info("Entity: " + entity);
 
         // Get org
-        String org = chartString.substring(2, 5);
+        String org = chartString.substring(3, 6);
+        LOG.info("Org: " + org);
         if (!org.equals("003")){
             org = "All else";
         }
         LOG.info("Org: " + org);
 
-        // Get natural class from the mapping table
-        Integer naturalClass = calculateNaturalClass(woMethod, costType, tradePrimaryKey, entity, org, transactionType, context);
-        LOG.info("Natural Class: " + naturalClass);
+        // Get natural classes from the mapping table
+        String[] naturalClasses = calculateNaturalClass(woMethod, costType, tradePrimaryKey, entity, org, context, parameterMap);
+        LOG.info("Natural Classes: " + naturalClasses);
+        String naturalClassExpense = naturalClasses[0];
+        String naturalClassRevenue = naturalClasses[1];
+        LOG.info("Natural Class Expense: " + naturalClassExpense);
+        LOG.info("Natural Class Revenue: " + naturalClassRevenue);
 
-        // Set Natural Class on order lines
-        IUXIntegerField nClass = currentBO.getIntegerFieldByName("FreeInteger1");
-        nClass.setValueAsInteger(naturalClass);
+        // Set Natural chart strings on order lines
+        IUXStringField nChartStringExpense = currentBO.getStringFieldByName(parameterMap.get("chartStringExpense"));
+        nChartStringExpense.setValueAsString(chartString + '.' + naturalClassExpense);
+        IUXStringField nChartStringRevenue = currentBO.getStringFieldByName(parameterMap.get("chartStringRevenue"));
+        nChartStringRevenue.setValueAsString(chartString + '.' + naturalClassRevenue);
 
         // Save changes
         currentBO.executeFieldChanges();
     }
 
-    public Integer calculateNaturalClass (String woMethod, String costType, Integer tradePrimaryKey, String entity, String org, String transactionType, IUXContext context){
+    public String[] calculateNaturalClass (String woMethod, String costType, Integer tradePrimaryKey, String entity, String org, IUXContext context, Map<String, String> parameterMap){
         // Calculate natural class
 
         // Find the UsrNaturalClassMapping BO
         IUXDatabaseQueryBuilder queryBldr = context.getBODatabaseQueryBuilder("UsrNaturalClassMapping");
         queryBldr.addSelectField("Syscode");
-        queryBldr.addSearchField("FreeInteger1"); // Trade
-        queryBldr.addSearchField("FreeString1"); // Org
-        queryBldr.addSearchField("FreeString21"); // Entity
-        queryBldr.addSearchField("FreeString22"); // Transaction type
-        queryBldr.addSearchField("FreeString23"); // Work order method
-        queryBldr.addSearchField("FreeString3"); // Cost type
+        queryBldr.addSearchField(parameterMap.get("trade")); // Trade
+        queryBldr.addSearchField(parameterMap.get("org")); // Org
+        queryBldr.addSearchField(parameterMap.get("entity")); // Entity
+        queryBldr.addSearchField(parameterMap.get("NCwoMethod")); // Work order method
+        queryBldr.addSearchField(parameterMap.get("NCcostType")); // Cost type
         IUXDatabaseQuery query = queryBldr.build();
-        query.getIntegerSearchExpression("FreeInteger1", UXOperator.EQUAL).setValue(tradePrimaryKey);
-        query.getStringSearchExpression("FreeString1", UXOperator.EQUAL).setValue(org);
-        query.getStringSearchExpression("FreeString21", UXOperator.EQUAL).setValue(entity);
-        query.getStringSearchExpression("FreeString22", UXOperator.EQUAL).setValue(transactionType);
-        query.getStringSearchExpression("FreeString23", UXOperator.EQUAL).setValue(woMethod);
-        query.getStringSearchExpression("FreeString3", UXOperator.EQUAL).setValue(costType);
+        query.getIntegerSearchExpression(parameterMap.get("trade"), UXOperator.EQUAL).setValue(tradePrimaryKey);
+        query.getStringSearchExpression(parameterMap.get("org"), UXOperator.EQUAL).setValue(org);
+        query.getStringSearchExpression(parameterMap.get("entity"), UXOperator.EQUAL).setValue(entity);
+        query.getStringSearchExpression(parameterMap.get("NCwoMethod"), UXOperator.EQUAL).setValue(woMethod);
+        query.getStringSearchExpression(parameterMap.get("NCcostType"), UXOperator.EQUAL).setValue(costType);
         IUXResultSet result = query.executeAll();
-        Integer naturalClass = 0000;
+        String naturalClassExpense, naturalClassRevenue;
+        naturalClassExpense = naturalClassRevenue = parameterMap.get("naturalClassDefault");
+
         if (result.first()) {
             Integer usrNaturalClassMappingRef = result.getPrimaryKey();
             IUXBusinessObject usrNaturalClassMapping = context.getBOByPrimaryKey("UsrNaturalClassMapping", usrNaturalClassMappingRef);
-            naturalClass = usrNaturalClassMapping.getIntegerFieldByName("FreeInteger4").getValueAsInteger();
+            naturalClassExpense = usrNaturalClassMapping.getStringFieldByName(parameterMap.get("naturalClassExpense")).getValueAsString();
+            naturalClassRevenue = usrNaturalClassMapping.getStringFieldByName(parameterMap.get("naturalClassRevenue")).getValueAsString();
         }
+
+        String[] naturalClass = new String[2];
+        naturalClass[0] = naturalClassExpense;
+        naturalClass[1] = naturalClassRevenue;
         return naturalClass;
+    }
+
+    // Convert string parameter to list
+    public static Map<String, String> getParameterAsStringList(String parameter, String delimiter) {
+        Map<String, String> myMap = new HashMap<String, String>();
+        // Split each line to pairs
+        String[] pairs = parameter.split("\n");
+        LOG.info(pairs);
+        // Loop through each pair
+        for (int i=0; i<pairs.length; i++) {
+            String pair = pairs[i];
+            LOG.info(pair);
+            String[] keyValue = pair.split(delimiter);
+            LOG.info(keyValue);
+            LOG.info(keyValue[0]);
+            LOG.info(keyValue[1]);
+            myMap.put(keyValue[0], keyValue[1]);
+        }
+        return myMap;
     }
 
     // Return description
