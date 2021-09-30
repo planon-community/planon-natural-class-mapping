@@ -47,20 +47,22 @@ public class NaturalClass implements IUserExtension{
         LOG.info("Trade Primary Key: " + tradePrimaryKey);
 
         // Get entity
+        String entityCutoff = parameterMap.get("entityCutoff");
         String entity = chartString.substring(0,2);
         Integer entityInt = Integer.parseInt(entity);
-        if (entityInt < 50){
-            entity = "Internal < 50";
+        if (entityInt < Integer.parseInt(entityCutoff)){
+            entity = "Internal < " + entityCutoff;
         } else{
-            entity = "External ≥ 50";
+            entity = "External ≥ " + entityCutoff;
         }
         LOG.info("Entity: " + entity);
 
         // Get org
+        String orgCutoff = parameterMap.get("orgCutoff");
+        String orgNotCutOff = parameterMap.get("orgNotCutOff");
         String org = chartString.substring(3, 6);
-        LOG.info("Org: " + org);
-        if (!org.equals("003")){
-            org = "All else";
+        if (!org.equals(orgCutoff)){
+            org = orgNotCutOff;
         }
         LOG.info("Org: " + org);
 
