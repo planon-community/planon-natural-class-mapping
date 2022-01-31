@@ -10,3 +10,4 @@ build
 *.class
 .DS_Store
 .vscode
+lib/
